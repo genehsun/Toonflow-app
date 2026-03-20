@@ -1,5 +1,6 @@
 import express from "express";
 import u from "@/utils";
+import { db } from "@/utils/db";
 import { z } from "zod";
 import { success } from "@/lib/responseFormat";
 import { validateFields } from "@/middleware/middleware";
@@ -28,23 +29,25 @@ export default router.post(
     }
     const scriptName = ep != null ? `第${ep}集` : "";
 
-    const id = await u.db.transaction(async (trx) => {
-      const [outlineId] = await trx("t_outline").insert({
+    const outlineId = await db.transaction(async (trx) => {
+      const inserted = await trx("t_outline").insert({
         data,
         projectId,
-        episode: episode ?? null,
+        episode: ep ?? null,
       });
+
+      const nextOutlineId = Array.isArray(inserted) ? inserted[0] : inserted;
 
       await trx("t_script").insert({
         name: scriptName,
         content: "",
         projectId,
-        outlineId,
+        outlineId: nextOutlineId,
       });
 
-      return outlineId;
+      return nextOutlineId;
     });
 
-    res.status(200).send(success({ message: "新增大纲成功", id }));
+    res.status(200).send(success({ message: "新增大纲成功", id: outlineId }));
   }
 );
