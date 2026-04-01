@@ -71,7 +71,8 @@ export default async (input: VideoConfig, config: AIConfig) => {
     const taskStatus = String(task?.task_status ?? task?.status ?? "").toLowerCase();
 
     switch (taskStatus) {
-      case "succeed": {
+      case "succeed":
+      case "done": {
         const videoUrl = task?.task_result?.videos?.[0]?.url;
         if (!videoUrl) {
           return { completed: false, error: "任务成功但未返回视频URL" };
