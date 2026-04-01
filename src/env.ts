@@ -44,7 +44,12 @@ if (!env) {
   const text = readFileSync(envFilePath, "utf8");
   for (const line of text.split("\n")) {
     const idx = line.indexOf("=");
-    if (idx > 0) process.env[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    if (idx > 0) {
+      const key = line.slice(0, idx).trim();
+      if (!process.env[key]) {
+        process.env[key] = line.slice(idx + 1).trim();
+      }
+    }
   }
   console.log(`[环境变量] ${env}`);
 }
