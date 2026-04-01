@@ -68,7 +68,7 @@ export default async (input: VideoConfig, config: AIConfig) => {
     }
 
     const task = queryData.data;
-    const taskStatus = task?.task_status;
+    const taskStatus = String(task?.task_status ?? task?.status ?? "").toLowerCase();
 
     switch (taskStatus) {
       case "succeed": {
@@ -82,6 +82,9 @@ export default async (input: VideoConfig, config: AIConfig) => {
         return { completed: false, error: `任务失败: ${task?.task_status_msg || "未知原因"}` };
       case "submitted":
       case "processing":
+      case "run":
+      case "running":
+      case "queued":
         return { completed: false };
       default:
         return { completed: false, error: `未知状态: ${taskStatus}` };
