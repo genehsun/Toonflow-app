@@ -38,9 +38,22 @@ export default router.post(
       });
       imageUrl = savePath; // 新图片路径
     } else if (filePath) {
-      // 前端传入已存在图片路径
+      // 前端传入已存在图片路径，提取相对路径部分
       try {
-        savePath = new URL(filePath).pathname;
+        const parsed = new URL(filePath);
+        let pathname = parsed.pathname;
+        // 去掉 OSSURL 中可能包含的路径前缀（如 /prod-api/）
+        const ossUrl = process.env.OSSURL;
+        if (ossUrl) {
+          try {
+            const ossPrefix = new URL(ossUrl).pathname;
+            if (ossPrefix !== "/" && pathname.startsWith(ossPrefix)) {
+              pathname = pathname.slice(ossPrefix.length);
+              if (!pathname.startsWith("/")) pathname = "/" + pathname;
+            }
+          } catch {}
+        }
+        savePath = pathname;
       } catch {
         savePath = filePath;
       }
