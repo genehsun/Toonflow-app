@@ -20,6 +20,7 @@ export default router.post(
     const { projectType, name, intro, type, artStyle, videoRatio } = req.body;
 
     await u.db("t_project").insert({
+      projectType,
       name,
       intro,
       type,

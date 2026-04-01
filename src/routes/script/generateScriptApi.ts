@@ -31,21 +31,25 @@ export default router.post(
   async (req, res) => {
     const { outlineId, scriptId } = req.body;
     const outlineData = await u.db("t_outline").where("id", outlineId).select("*").first();
-    if (!outlineData) return res.status(500).send(success({ message: "大纲为空" }));
+    if (!outlineData) return res.status(500).send(error("大纲为空"));
+
+    const project = await u.db("t_project").where("id", outlineData.projectId).select("projectType").first();
+    if (!project) return res.status(500).send(error("项目为空"));
+
     const parameter = JSON.parse(outlineData.data!);
+    const chapterRange = Array.isArray(parameter.chapterRange) ? parameter.chapterRange : [];
+    const isScriptProject = project.projectType === "基于剧本";
 
-    const novelData = (await u
-      .db("t_novel")
-      .whereIn("chapterIndex", parameter.chapterRange)
-      .where("projectId", outlineData.projectId)
-      .select("*")) as NovelChapter[];
+    const novelData = (chapterRange.length
+      ? await u.db("t_novel").whereIn("chapterIndex", chapterRange).where("projectId", outlineData.projectId).select("*")
+      : []) as NovelChapter[];
 
-    if (novelData.length == 0) return res.status(500).send(success({ message: "原文为空" }));
+    if (!isScriptProject && novelData.length === 0) return res.status(500).send(error("原文为空"));
 
     const result: string = mergeNovelText(novelData);
     try {
       const data = await generateScript(parameter ?? "", result ?? "");
-      if (!data) return res.status(500).send({ message: "生成剧本失败" });
+      if (!data) return res.status(500).send(error("生成剧本失败"));
 
       await u.db("t_script").where("id", scriptId).update({
         content: data,
