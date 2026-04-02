@@ -99,7 +99,8 @@ export default router.post(
     let userPrompt = "";
     if (type == "role") {
       const data = findItemByName(result, name, "characters");
-      const chapterRange = (Array.isArray(data?.chapterRange) ? data.chapterRange : []).filter((v) => v != null);
+      if (!data) return res.status(400).send(error(`角色「${name}」未在大纲中找到，请先在大纲中添加该角色`));
+      const chapterRange = data.chapterRange.filter((v) => v != null);
       const novelData = chapterRange.length > 0 ? ((await u.db("t_novel").whereIn("chapterIndex", chapterRange).select("*")) as NovelChapter[]) : [];
       const results: string = mergeNovelText(novelData);
       systemPrompt = role;
@@ -122,8 +123,8 @@ export default router.post(
     }
     if (type == "scene") {
       const data = findItemByName(result, name, "scenes");
-
-      const chapterRange = (Array.isArray(data?.chapterRange) ? data.chapterRange : []).filter((v) => v != null);
+      if (!data) return res.status(400).send(error(`场景「${name}」未在大纲中找到，请先在大纲中添加该场景`));
+      const chapterRange = data.chapterRange.filter((v) => v != null);
       const novelData = chapterRange.length > 0 ? ((await u.db("t_novel").whereIn("chapterIndex", chapterRange).select("*")) as NovelChapter[]) : [];
       const results: string = mergeNovelText(novelData);
       systemPrompt = scene;
@@ -146,7 +147,8 @@ export default router.post(
     }
     if (type == "props") {
       const data = findItemByName(result, name, "props");
-      const chapterRange = (Array.isArray(data?.chapterRange) ? data.chapterRange : []).filter((v) => v != null);
+      if (!data) return res.status(400).send(error(`道具「${name}」未在大纲中找到，请先在大纲中添加该道具`));
+      const chapterRange = data.chapterRange.filter((v) => v != null);
       const novelData = chapterRange.length > 0 ? ((await u.db("t_novel").whereIn("chapterIndex", chapterRange).select("*")) as NovelChapter[]) : [];
       const results: string = mergeNovelText(novelData);
       systemPrompt = tool;
