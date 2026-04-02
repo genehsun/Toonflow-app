@@ -2,8 +2,8 @@ import express from "express";
 import expressWs, { Application } from "express-ws";
 import u from "@/utils";
 import Storyboard from "@/agents/storyboard";
-const router = express.Router();
-expressWs(router as unknown as Application);
+const router = express.Router() as express.Router & { ws: any };
+// expressWs(router as unknown as Application); // Removed dummy WS instance that broke main app upgrade
 
 // 分镜对话Agent
 router.ws("/", async (ws, req) => {

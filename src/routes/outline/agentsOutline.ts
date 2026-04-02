@@ -2,8 +2,8 @@ import express from "express";
 import expressWs, { Application } from "express-ws";
 import u from "@/utils";
 import OutlineScript from "@/agents/outlineScript";
-const router = express.Router();
-expressWs(router as unknown as Application);
+const router = express.Router() as express.Router & { ws: any };
+// expressWs(router as unknown as Application); // Removed dummy WS instance
 
 router.ws("/", async (ws, req) => {
   let agent: OutlineScript;
