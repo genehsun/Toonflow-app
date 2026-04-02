@@ -720,6 +720,8 @@ ${task}
     });
 
     let fullResponse = "";
+    const subAgentNames: string[] = ["AI1", "AI2", "director"];
+    const toolResults: Array<{ tool: string; result: string }> = [];
     try {
       const envContext = await this.buildEnvironmentContext();
 
@@ -738,12 +740,18 @@ ${task}
         promptConfig,
       );
 
-      const subAgentNames: string[] = ["AI1", "AI2", "director"];
       for await (const item of fullStream) {
         if (item.type == "tool-call") {
           // 子 agent 调用由 transfer 事件通知，不重复 emit
           if (!subAgentNames.includes(item.title)) {
             this.emit("toolCall", { agent: "main", name: item.title, args: null });
+          }
+        }
+        if (item.type == "tool-result") {
+          // 过滤子 agent 的执行结果，只收集直接工具调用的结果
+          if (!subAgentNames.includes(item.toolName)) {
+            const resultStr = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
+            toolResults.push({ tool: item.toolName, result: resultStr });
           }
         }
         if (item.type == "text-delta") {
@@ -767,6 +775,14 @@ ${task}
         role: "assistant",
         content: fullResponse,
       });
+    } else if (toolResults.length > 0) {
+      // LLM 调用了工具但未生成文本回复，用工具结果构造回复
+      const summary = toolResults
+        .map((r) => `【${r.tool}】${r.result}`)
+        .join("\n");
+      fullResponse = summary;
+      this.emit("data", fullResponse);
+      this.history.push({ role: "assistant", content: fullResponse });
     } else {
       const fallback = "⚠️ AI 未返回有效内容，请重试。";
       this.emit("data", fallback);
