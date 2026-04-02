@@ -14,6 +14,10 @@ function toSignedStoryboardPath(filePath: string | null | undefined) {
   return u.oss.getFileUrl(normalizedPath);
 }
 
+function toNormalizedStoryboardPath(filePath: string | null | undefined) {
+  return u.oss.normalizeStoredPath(filePath ?? "");
+}
+
 // 获取分镜
 export default router.post(
   "/",
@@ -40,9 +44,19 @@ export default router.post(
 
     const data = await Promise.all(
       assets.map(async (item: any) => {
+        const mainFilePath = toNormalizedStoryboardPath(item.filePath);
+        const uniqueImagePaths = new Set<string>();
         const imgArr = await Promise.all(
           generateImg
             .filter((img: any) => Number(img.assetsId) === Number(item.id))
+            .filter((img: any) => {
+              const normalizedPath = toNormalizedStoryboardPath(img.filePath);
+              if (!normalizedPath || normalizedPath === mainFilePath || uniqueImagePaths.has(normalizedPath)) {
+                return false;
+              }
+              uniqueImagePaths.add(normalizedPath);
+              return true;
+            })
             .map(async (img: any) => {
               return {
                 ...img,
