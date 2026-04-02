@@ -646,7 +646,7 @@ ${task}
 
       for await (const item of fullStream) {
         if (item.type == "tool-call") {
-          this.emit("toolCall", { agent: "main", name: item.title, args: null });
+          this.emit("toolCall", { agent: agentType, name: item.title, args: null });
         }
         if (item.type == "text-delta") {
           fullResponse += item.text;
@@ -738,9 +738,13 @@ ${task}
         promptConfig,
       );
 
+      const subAgentNames: string[] = ["AI1", "AI2", "director"];
       for await (const item of fullStream) {
         if (item.type == "tool-call") {
-          this.emit("toolCall", { agent: "main", name: item.title, args: null });
+          // 子 agent 调用由 transfer 事件通知，不重复 emit
+          if (!subAgentNames.includes(item.title)) {
+            this.emit("toolCall", { agent: "main", name: item.title, args: null });
+          }
         }
         if (item.type == "text-delta") {
           fullResponse += item.text;
