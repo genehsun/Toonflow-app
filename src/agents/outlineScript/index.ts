@@ -75,6 +75,8 @@ export default class OutlineScript {
   readonly emitter = new EventEmitter();
   history: Array<ModelMessage> = [];
   novelChapters: DB["t_novel"][] = [];
+  private _busy = false;
+  private _busyMsg = "";
 
   constructor(projectId: number) {
     this.projectId = projectId;
@@ -630,35 +632,44 @@ ${task}
 
     const context = await this.buildFullContext(task);
 
-    const { fullStream } = await u.ai.text.stream(
-      {
-        system: SYSTEM_PROMPTS[agentType],
-        tools: this.getSubAgentTools(),
-        messages: [{ role: "user", content: context }],
-        maxStep: 100,
-      },
-      promptConfig,
-    );
-
     let fullResponse = "";
-    for await (const item of fullStream) {
-      if (item.type == "tool-call") {
-        this.emit("toolCall", { agent: "main", name: item.title, args: null });
+    try {
+      const { fullStream } = await u.ai.text.stream(
+        {
+          system: SYSTEM_PROMPTS[agentType],
+          tools: this.getSubAgentTools(),
+          messages: [{ role: "user", content: context }],
+          maxStep: 100,
+        },
+        promptConfig,
+      );
+
+      for await (const item of fullStream) {
+        if (item.type == "tool-call") {
+          this.emit("toolCall", { agent: "main", name: item.title, args: null });
+        }
+        if (item.type == "text-delta") {
+          fullResponse += item.text;
+          this.emit("subAgentStream", { agent: agentType, text: item.text });
+        }
       }
-      if (item.type == "text-delta") {
-        fullResponse += item.text;
-        this.emit("subAgentStream", { agent: agentType, text: item.text });
-      }
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      this.log(`Sub-Agent 异常`, errMsg);
+      this.emit("subAgentEnd", { agent: agentType });
+      return `${agentType}执行失败：${errMsg}`;
     }
 
     this.emit("subAgentEnd", { agent: agentType });
-    this.history.push({
-      role: "assistant",
-      content: fullResponse,
-    });
+    if (fullResponse) {
+      this.history.push({
+        role: "assistant",
+        content: fullResponse,
+      });
+    }
     this.log(`Sub-Agent 完成`, agentType);
 
-    return fullResponse ?? `${agentType}已完成任务`;
+    return fullResponse || `${agentType}已完成任务`;
   }
 
   private createSubAgentTool(agentType: AgentType, description: string) {
@@ -691,45 +702,74 @@ ${task}
     };
   }
 
+  get busy() {
+    return this._busy;
+  }
+
+  get busyMsg() {
+    return this._busyMsg;
+  }
+
   async call(msg: string): Promise<string> {
+    this._busy = true;
+    this._busyMsg = msg.length > 20 ? msg.slice(0, 20) + "..." : msg;
+
     this.history.push({
       role: "user",
       content: msg,
     });
 
-    const envContext = await this.buildEnvironmentContext();
-
-    const prompts = await u.db("t_prompts").where("code", "outlineScript-main").first();
-    const promptConfig = await u.getPromptAi("outlineScriptAgent");
-
-    const mainPrompts = prompts?.customValue || prompts?.defaultValue || "不论用户说什么，请直接输出Agent配置异常";
-
-    const { fullStream } = await u.ai.text.stream(
-      {
-        system: `${envContext}\n${mainPrompts}`,
-        tools: this.getAllTools(),
-        messages: this.history,
-        maxStep: 100,
-      },
-      promptConfig,
-    );
-
     let fullResponse = "";
-    for await (const item of fullStream) {
-      if (item.type == "tool-call") {
-        this.emit("toolCall", { agent: "main", name: item.title, args: null });
+    try {
+      const envContext = await this.buildEnvironmentContext();
+
+      const prompts = await u.db("t_prompts").where("code", "outlineScript-main").first();
+      const promptConfig = await u.getPromptAi("outlineScriptAgent");
+
+      const mainPrompts = prompts?.customValue || prompts?.defaultValue || "不论用户说什么，请直接输出Agent配置异常";
+
+      const { fullStream } = await u.ai.text.stream(
+        {
+          system: `${envContext}\n${mainPrompts}`,
+          tools: this.getAllTools(),
+          messages: this.history,
+          maxStep: 100,
+        },
+        promptConfig,
+      );
+
+      for await (const item of fullStream) {
+        if (item.type == "tool-call") {
+          this.emit("toolCall", { agent: "main", name: item.title, args: null });
+        }
+        if (item.type == "text-delta") {
+          fullResponse += item.text;
+          this.emit("data", item.text);
+        }
       }
-      if (item.type == "text-delta") {
-        fullResponse += item.text;
-        this.emit("data", item.text);
-      }
+    } catch (err: any) {
+      const errMsg = err?.message || String(err);
+      console.error("[OutlineScript] call() 异常:", errMsg);
+      this.emit("error", `AI 服务调用失败：${errMsg}`);
+      this._busy = false;
+      this._busyMsg = "";
+      return "";
     }
-    this.history.push({
-      role: "assistant",
-      content: fullResponse,
-    });
+
+    if (fullResponse) {
+      this.history.push({
+        role: "assistant",
+        content: fullResponse,
+      });
+    } else {
+      const fallback = "⚠️ AI 未返回有效内容，请重试。";
+      this.emit("data", fallback);
+      fullResponse = fallback;
+    }
 
     this.emit("response", fullResponse);
+    this._busy = false;
+    this._busyMsg = "";
 
     return fullResponse;
   }

@@ -99,7 +99,13 @@ router.ws("/", async (ws, req) => {
       switch (data?.type) {
         case "msg":
           let prompt = msg.data;
-          if (msg.type == "user") await agent.call(prompt);
+          if (msg.type == "user") {
+            if (agent.busy) {
+              ws.send(JSON.stringify({ type: "notice", data: `⏳ 正在处理「${agent.busyMsg}」，请等待完成后再发送新消息` }));
+              return;
+            }
+            await agent.call(prompt);
+          }
           break;
         case "cleanHistory":
           agent.history = [];
