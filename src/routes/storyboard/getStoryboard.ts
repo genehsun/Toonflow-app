@@ -6,6 +6,14 @@ import { validateFields } from "@/middleware/middleware";
 
 const router = express.Router();
 
+function toSignedStoryboardPath(filePath: string | null | undefined) {
+  const normalizedPath = u.oss.normalizeStoredPath(filePath ?? "");
+  if (!normalizedPath) {
+    return "";
+  }
+  return u.oss.getFileUrl(normalizedPath);
+}
+
 // 获取分镜
 export default router.post(
   "/",
@@ -27,10 +35,7 @@ export default router.post(
     const generateImg = await u.db("t_image").whereIn("assetsId", assetsIds).where("type", "分镜").select("assetsId", "filePath");
 
     for (const item of assets) {
-      if (!item.filePath) {
-        item.filePath = "";
-      }
-      item.filePath = await u.oss.getFileUrl(item.filePath ?? "");
+      item.filePath = await toSignedStoryboardPath(item.filePath);
     }
 
     const data = await Promise.all(
@@ -41,7 +46,7 @@ export default router.post(
             .map(async (img: any) => {
               return {
                 ...img,
-                filePath: await u.oss.getFileUrl(img.filePath ?? ""),
+                filePath: await toSignedStoryboardPath(img.filePath),
               };
             })
         );
