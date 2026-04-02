@@ -1,6 +1,6 @@
 import u from "@/utils";
-import axios from "axios";
 import { v4 as uuid } from "uuid";
+
 async function getImageBase64ForId(imageId: string | number) {
   const imagePath = await u
     .db("t_assets")
@@ -9,15 +9,7 @@ async function getImageBase64ForId(imageId: string | number) {
     .first();
 
   if (!imagePath || !imagePath.filePath) return ""; // 未找到图片路径
-  const url = await u.oss.getFileUrl(imagePath.filePath);
-  return await urlToBase64(url);
-}
-
-async function urlToBase64(imageUrl: string): Promise<string> {
-  const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
-  const contentType = response.headers["content-type"] || "image/png";
-  const base64 = Buffer.from(response.data, "binary").toString("base64");
-  return `data:${contentType};base64,${base64}`;
+  return await u.oss.storedPathToImageBase64(imagePath.filePath);
 }
 // 将图片ID和指令转换为base64数组和替换后的指令
 async function convertDirectiveAndImages(images: Record<string, string>, directive: string) {
@@ -55,8 +47,8 @@ async function convertDirectiveAndImages(images: Record<string, string>, directi
     } else if (typeof imageVal === "number") {
       const base64 = await getImageBase64ForId(imageVal);
       base64Images.push(base64);
-    } else if (imageVal.includes("http")) {
-      const base64 = await urlToBase64(imageVal);
+    } else if (typeof imageVal === "string") {
+      const base64 = await u.oss.storedPathToImageBase64(imageVal);
       base64Images.push(base64);
     }
   }

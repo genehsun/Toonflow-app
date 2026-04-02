@@ -1,7 +1,7 @@
 import isPathInside from "is-path-inside";
+import axios from "axios";
 import fs from "node:fs/promises";
 import path from "node:path";
-import u from "@/utils";
 
 // 规范化路径：去除前导斜杠，并将路径分隔符统一转换为系统分隔符
 function normalizeUserPath(userPath: string): string {
@@ -20,6 +20,13 @@ function resolveSafeLocalPath(userPath: string, rootDir: string): string {
     throw new Error(`${userPath} 不在 OSS 根目录内`);
   }
   return absPath;
+}
+
+async function urlToBase64(imageUrl: string): Promise<string> {
+  const response = await axios.get(imageUrl, { responseType: "arraybuffer" });
+  const contentType = response.headers["content-type"] || "image/png";
+  const base64 = Buffer.from(response.data, "binary").toString("base64");
+  return `data:${contentType};base64,${base64}`;
 }
 
 class OSS {
@@ -57,6 +64,40 @@ class OSS {
     // URL 始终使用 /，所以这里需要将系统分隔符转回 /
     const url = process.env.OSSURL || `http://127.0.0.1:60000/`;
     return `${url}${safePath.split(path.sep).join("/")}`;
+  }
+
+  normalizeStoredPath(storedPath: string): string {
+    const trimmed = storedPath.trim();
+
+    if (!trimmed) {
+      return "";
+    }
+
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      const { pathname } = new URL(trimmed);
+      return this.normalizeStoredPath(pathname);
+    }
+
+    return trimmed.replace(/^\/uploads\//, "/");
+  }
+
+  async storedPathToImageBase64(storedPath: string): Promise<string> {
+    await this.ensureInit();
+    const normalizedPath = this.normalizeStoredPath(storedPath);
+
+    if (!normalizedPath) {
+      return "";
+    }
+
+    if (normalizedPath.startsWith("data:image/")) {
+      return normalizedPath;
+    }
+
+    if (normalizedPath.startsWith("http://") || normalizedPath.startsWith("https://")) {
+      return await urlToBase64(normalizedPath);
+    }
+
+    return await this.getImageBase64(normalizedPath);
   }
 
   /**
