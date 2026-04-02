@@ -748,7 +748,9 @@ ${task}
     } catch (err: any) {
       const errMsg = err?.message || String(err);
       console.error("[Storyboard] call() 异常:", errMsg);
-      this.emit("error", `AI 服务调用失败：${errMsg}`);
+      const errFallback = `AI 服务调用失败：${errMsg}`;
+      this.history.push({ role: "assistant", content: errFallback });
+      this.emit("error", errFallback);
       this._busy = false;
       this._busyMsg = "";
       return "";
@@ -762,6 +764,7 @@ ${task}
     } else {
       const fallback = "⚠️ AI 未返回有效内容，请重试。";
       this.emit("data", fallback);
+      this.history.push({ role: "assistant", content: fallback });
       fullResponse = fallback;
     }
 
