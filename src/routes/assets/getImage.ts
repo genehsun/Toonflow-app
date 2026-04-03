@@ -5,6 +5,14 @@ import { z } from "zod";
 import { validateFields } from "@/middleware/middleware";
 const router = express.Router();
 
+function toSignedAssetPath(filePath: string | null | undefined) {
+  const normalizedPath = u.oss.normalizeStoredPath(filePath ?? "");
+  if (!normalizedPath) {
+    return "";
+  }
+  return u.oss.getFileUrl(normalizedPath);
+}
+
 // 获取生成图片
 export default router.post(
   "/",
@@ -20,7 +28,7 @@ export default router.post(
 
     for (const item of tempAssets) {
       if (item.filePath) {
-        item.filePath = await u.oss.getFileUrl(item.filePath);
+        item.filePath = await toSignedAssetPath(item.filePath);
       } else {
         item.filePath = "";
       }
@@ -29,7 +37,7 @@ export default router.post(
     const data = {
       id: assets!.id,
       state: assets!.state,
-      filePath: assets!.filePath ? await u.oss.getFileUrl(assets!.filePath) : "",
+      filePath: await toSignedAssetPath(assets!.filePath),
       scriptId: assets!.scriptId,
       tempAssets,
     };
