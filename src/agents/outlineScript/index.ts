@@ -633,6 +633,7 @@ ${task}
     const context = await this.buildFullContext(task);
 
     let fullResponse = "";
+    const subToolResults: Array<{ tool: string; result: string }> = [];
     try {
       const { fullStream } = await u.ai.text.stream(
         {
@@ -648,6 +649,10 @@ ${task}
         if (item.type == "tool-call") {
           this.emit("toolCall", { agent: agentType, name: item.title, args: null });
         }
+        if (item.type == "tool-result") {
+          const resultStr = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
+          subToolResults.push({ tool: item.toolName, result: resultStr });
+        }
         if (item.type == "text-delta") {
           fullResponse += item.text;
           this.emit("subAgentStream", { agent: agentType, text: item.text });
@@ -661,6 +666,13 @@ ${task}
     }
 
     this.emit("subAgentEnd", { agent: agentType });
+
+    // 优先用文本回复，否则用工具执行结果
+    if (!fullResponse && subToolResults.length > 0) {
+      fullResponse = subToolResults.map((r) => `【${r.tool}】${r.result}`).join("\n");
+      this.emit("subAgentStream", { agent: agentType, text: fullResponse });
+    }
+
     if (fullResponse) {
       this.history.push({
         role: "assistant",
@@ -722,6 +734,7 @@ ${task}
     let fullResponse = "";
     const subAgentNames: string[] = ["AI1", "AI2", "director"];
     const toolResults: Array<{ tool: string; result: string }> = [];
+    const subAgentResults: Array<{ agent: string; result: string }> = [];
     try {
       const envContext = await this.buildEnvironmentContext();
 
@@ -743,14 +756,16 @@ ${task}
       for await (const item of fullStream) {
         if (item.type == "tool-call") {
           // 子 agent 调用由 transfer 事件通知，不重复 emit
-          if (!subAgentNames.includes(item.title)) {
+          if (!subAgentNames.includes(item.title ?? "")) {
             this.emit("toolCall", { agent: "main", name: item.title, args: null });
           }
         }
         if (item.type == "tool-result") {
-          // 过滤子 agent 的执行结果，只收集直接工具调用的结果
-          if (!subAgentNames.includes(item.toolName)) {
-            const resultStr = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
+          const resultStr = typeof item.output === "string" ? item.output : JSON.stringify(item.output);
+          if (subAgentNames.includes(item.toolName)) {
+            // 子 agent 结果单独收集，作为备用 fallback
+            subAgentResults.push({ agent: item.toolName, result: resultStr });
+          } else {
             toolResults.push({ tool: item.toolName, result: resultStr });
           }
         }
@@ -764,10 +779,11 @@ ${task}
       console.error("[OutlineScript] call() 异常:", errMsg);
       const errFallback = `AI 服务调用失败：${errMsg}`;
       this.history.push({ role: "assistant", content: errFallback });
-      this.emit("error", errFallback);
+      this.emit("data", errFallback);
+      this.emit("response", errFallback);
       this._busy = false;
       this._busyMsg = "";
-      return "";
+      return errFallback;
     }
 
     if (fullResponse) {
@@ -776,9 +792,17 @@ ${task}
         content: fullResponse,
       });
     } else if (toolResults.length > 0) {
-      // LLM 调用了工具但未生成文本回复，用工具结果构造回复
+      // LLM 调用了直接工具但未生成文本回复，用工具结果构造回复
       const summary = toolResults
         .map((r) => `【${r.tool}】${r.result}`)
+        .join("\n");
+      fullResponse = summary;
+      this.emit("data", fullResponse);
+      this.history.push({ role: "assistant", content: fullResponse });
+    } else if (subAgentResults.length > 0) {
+      // LLM 仅调用了子 agent 但未生成文本回复，用子 agent 结果构造回复
+      const summary = subAgentResults
+        .map((r) => `【${r.agent}】${r.result}`)
         .join("\n");
       fullResponse = summary;
       this.emit("data", fullResponse);
